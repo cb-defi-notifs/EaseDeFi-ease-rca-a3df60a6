@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import {
-  increase,
+  fastForward,
   getTimestamp,
   mine,
   ether,
@@ -12,20 +12,23 @@ import {
 import { BigNumber } from "ethers";
 
 import BalanceTree from "./balance-tree";
-import { MockERC20 } from "../src/types/MockERC20";
-import { MockRouter } from "../src/types/MockRouter";
-import { RcaShield } from "../src/types/RcaShield";
-import { RcaController } from "../src/types/RcaController";
-import { RcaTreasury } from "../src/types/RcaTreasury";
-import { RcaTreasury__factory } from "../src/types/factories/RcaTreasury__factory";
-import { RcaController__factory } from "../src/types/factories/RcaController__factory";
-import { RcaShield__factory } from "../src/types/factories/RcaShield__factory";
-import { MockERC20__factory } from "../src/types/factories/MockERC20__factory";
-import { MockRouter__factory } from "../src/types/factories/MockRouter__factory";
 
 import type { Contracts, MerkleProofs, MerkleTrees, Signers } from "./types";
+import {
+  MockERC20,
+  MockERC20__factory,
+  MockRouter,
+  MockRouter__factory,
+  RcaController,
+  RcaController__factory,
+  RcaShield,
+  RcaShield__factory,
+  RcaTreasury,
+  RcaTreasury__factory,
+} from "../src/types";
 
 // Testing base RCA functionalities
+// comment to rerun jobs
 describe("RCAs and Controller", function () {
   const contracts = {} as Contracts;
   const signers = {} as Signers;
@@ -258,8 +261,8 @@ describe("RCAs and Controller", function () {
         await contracts.rcaController.connect(signers.guardian).setPercentReserved(merkleTrees.resTree2.getHexRoot());
 
         // Wait about half a year, so about 10% should be taken.
-        increase(31536000 / 2);
-        mine();
+        await fastForward(31536000 / 2);
+        await mine();
 
         // returns: expiry, vInt, r, s
         const sigValues2 = await getSignatureDetailsFromCapOracle({
@@ -431,8 +434,8 @@ describe("RCAs and Controller", function () {
         const amtForSaleBefore = await contracts.rcaShield.amtForSale();
 
         // increase evm time so that updated state can be tested
-        increase(200);
-        mine();
+        await fastForward(200);
+        await mine();
 
         await contracts.rcaShield
           .connect(signers.user)
@@ -506,7 +509,7 @@ describe("RCAs and Controller", function () {
         expect(redeemRequest.endTime).to.be.equal(endTime);
 
         // A bit more than 1 day withdrawal
-        await increase(86500);
+        await fastForward(86500);
 
         await contracts.rcaShield
           .connect(signers.user)
@@ -530,7 +533,7 @@ describe("RCAs and Controller", function () {
 
         // Wait half a day to make sure request time resets
         // (don't want both requests starting at the same time or we can't check).
-        increase(43200);
+        await fastForward(43200);
 
         await contracts.rcaShield.connect(signers.user).redeemRequest(ether("50"), 0, [], 0, merkleProofs.resProof1);
         startTime = await getTimestamp();
@@ -554,10 +557,10 @@ describe("RCAs and Controller", function () {
         expect(requests[2]).to.be.equal(endTime);
 
         // A bit more than 1 day withdrawal
-        increase(86500);
+        await fastForward(86500);
 
         // will fail if it routes
-        contracts.rcaShield
+        await contracts.rcaShield
           .connect(signers.user)
           .redeemFinalize(contracts.router.address, ethers.constants.AddressZero, 0, merkleProofs.liqProof1, 0, []);
       });
@@ -576,7 +579,7 @@ describe("RCAs and Controller", function () {
         expect(requests[2]).to.be.equal(endTime);
 
         // A bit more than 1 day withdrawal
-        increase(86500);
+        await fastForward(86500);
 
         await contracts.rcaController.connect(signers.guardian).setRouterVerified(contracts.router.address, true);
 
@@ -1174,8 +1177,8 @@ describe("RCAs and Controller", function () {
     describe("#feature", function () {
       it("should update APR when needed", async function () {
         // Wait about half a year, so about 5% should be taken.
-        increase(31536000 / 2);
-        mine();
+        await fastForward(31536000 / 2);
+        await mine();
 
         const newCumLiqForClaims = ether("0");
         const rcaAmountForUvalue = ether("1");
@@ -1207,15 +1210,15 @@ describe("RCAs and Controller", function () {
       // Mint => wait for half a year => set liquidity => wait half a year => check.
       // Should result in 50% of original being APR and 45% (90% of 50%) of subsequent
       it("should update correctly with tokens for sale", async function () {
-        increase(31536000 / 2);
-        mine();
+        await fastForward(31536000 / 2);
+        await mine();
 
         await contracts.rcaController
           .connect(signers.gov)
           .setLiqTotal(merkleTrees.liqTree1.getHexRoot(), merkleTrees.resTree1.getHexRoot());
 
-        increase(31536000 / 2);
-        mine();
+        await fastForward(31536000 / 2);
+        await mine();
 
         const newCumLiqForClaims = ether("100");
         const rcaAmountForUvalue = ether("1");
@@ -1246,8 +1249,8 @@ describe("RCAs and Controller", function () {
 
       // Verify APR updates for
       it("should update correctly with tokens for sale, percent paused, and APR change", async function () {
-        increase(31536000 / 2);
-        mine();
+        await fastForward(31536000 / 2);
+        await mine();
 
         await contracts.rcaController
           .connect(signers.gov)
@@ -1256,8 +1259,8 @@ describe("RCAs and Controller", function () {
         await contracts.rcaController.connect(signers.guardian).setPercentReserved(merkleTrees.resTree2.getHexRoot());
 
         // Wait about half a year, so about 5% should be taken.
-        increase(31536000 / 2);
-        mine();
+        await fastForward(31536000 / 2);
+        await mine();
         const newCumLiqForClaims = ether("100");
         const rcaAmountForUvalue = ether("1");
         const percentReserved = BigNumber.from(100); // 10% == 1000

@@ -3,17 +3,14 @@
 pragma solidity ^0.8.11;
 
 import "../RcaShieldNormalized.sol";
-import { IMasterChef } from "../../external/Sushiswap.sol";
+import { IRibbonVault, ILiquidityGauge, IMinter } from "../../external/Ribbon.sol";
 
-contract RcaShieldOnsen is RcaShieldNormalized {
+contract RcaShieldRibbon is RcaShieldNormalized {
     using SafeERC20 for IERC20Metadata;
 
-    IMasterChef public immutable masterChef;
-
-    // Check our masterchef against this to call the correct functions.
-    address private constant MCV1 = 0xc2EdaD668740f1aA35E4D8f227fB8E17dcA888Cd;
-
-    uint256 public immutable pid;
+    IRibbonVault public immutable ribbonVault;
+    ILiquidityGauge public immutable liquidityGauge;
+    IMinter public immutable rbnMinter;
 
     constructor(
         string memory _name,
@@ -22,20 +19,17 @@ contract RcaShieldOnsen is RcaShieldNormalized {
         uint256 _uTokenDecimals,
         address _governance,
         address _controller,
-        IMasterChef _masterChef,
-        uint256 _pid
+        IRibbonVault _ribbonVault,
+        ILiquidityGauge _liquidityGauge,
+        IMinter _rbnMinter
     ) RcaShieldNormalized(_name, _symbol, _uToken, _uTokenDecimals, _governance, _controller) {
-        masterChef = _masterChef;
-        pid = _pid;
-        uToken.safeApprove(address(masterChef), type(uint256).max);
+        ribbonVault = _ribbonVault;
+        liquidityGauge = _liquidityGauge;
+        rbnMinter = _rbnMinter;
     }
 
     function getReward() external {
-        if (address(masterChef) == MCV1) {
-            masterChef.deposit(pid, 0);
-        } else {
-            masterChef.harvest(pid, address(this));
-        }
+        rbnMinter.mint(address(liquidityGauge));
     }
 
     function purchase(
@@ -61,22 +55,20 @@ contract RcaShieldOnsen is RcaShieldNormalized {
         token.safeTransfer(msg.sender, _amount);
         uToken.safeTransferFrom(msg.sender, address(this), _normalizedUAmount(underlyingAmount));
 
-        masterChef.deposit(pid, underlyingAmount, address(this));
+        _afterMint(_normalizedUAmount(underlyingAmount));
     }
 
     function _uBalance() internal view override returns (uint256) {
-        return
-            ((uToken.balanceOf(address(this)) + masterChef.userInfo(pid, address(this)).amount) * BUFFER) /
-            BUFFER_UTOKEN;
+        return ((uToken.balanceOf(address(this)) + liquidityGauge.balanceOf(address(this))) * BUFFER) / BUFFER_UTOKEN;
     }
 
     function _afterMint(uint256 _uAmount) internal override {
-        if (address(masterChef) == MCV1) masterChef.deposit(pid, _uAmount);
-        else masterChef.deposit(pid, _uAmount, address(this));
+        ribbonVault.maxRedeem();
+        ribbonVault.stake(_uAmount);
     }
 
     function _afterRedeem(uint256 _uAmount) internal override {
-        if (address(masterChef) == MCV1) masterChef.withdraw(pid, _uAmount);
-        else masterChef.withdraw(pid, _uAmount, address(this));
+        require(liquidityGauge.user_checkpoint(address(this)), "Checkpoint didnt work");
+        liquidityGauge.withdraw(_normalizedUAmount(_uAmount));
     }
 }
